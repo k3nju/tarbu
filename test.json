@@ -1,0 +1,5 @@
+{
+	"Dst":"/tmp",
+	"KeepGen":3,
+	"Entries":[{"Name":"test", "Path":"/tmp/hoge"}]
+}
