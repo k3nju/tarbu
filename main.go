@@ -12,10 +12,12 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 )
 
 const _Suffix = ".tar.gz."
+const _W_OK = 2 // R_OK, F_OK, X_OK , where are they defined?
 
 type backupEntry struct {
 	Name string
@@ -41,6 +43,7 @@ func (config *backupConfig) isValid() error {
 }
 
 func (config *backupConfig) isDstWritable() error {
+	var err error
 	fi, err := os.Stat(config.Dst)
 	if err != nil {
 		return err
@@ -48,6 +51,11 @@ func (config *backupConfig) isDstWritable() error {
 
 	if !fi.IsDir() {
 		return fmt.Errorf("config.Dst is not directory. dir=%s", config.Dst)
+	}
+
+	err = syscall.Access(config.Dst, _W_OK)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -123,11 +131,13 @@ func backupImpl(ch resultCh, wg *sync.WaitGroup, i int, config *backupConfig) {
 	matchs, err := filepath.Glob(filepath.Join(config.Dst, ent.Name+_Suffix+"*"))
 	if err != nil {
 		ch <- result{ent.Name, err}
+		return
 	}
 	sort.Sort(tsSortable(matchs))
 	for len(matchs) > config.KeepGen {
 		if err := os.Remove(matchs[0]); err != nil {
 			ch <- result{ent.Name, err}
+			return
 		}
 		matchs = matchs[1:]
 	}
@@ -150,9 +160,10 @@ func backup(config *backupConfig) {
 	}()
 
 	for r := range rch {
-		fmt.Printf("%s %#v\n", r.name, r.err)
+		if r.err != nil {
+			fmt.Printf("Backup failed: entry=%s err=%s\n", r.name, r.err.String())
+		}
 	}
-	wg.Wait()
 }
 
 func main() {
